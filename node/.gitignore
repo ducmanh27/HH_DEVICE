@@ -1,0 +1,44 @@
+# Bỏ qua thư mục build
+/Debug/
+/Release/
+
+# Bỏ qua cấu hình IDE
+/.settings/
+/.cproject
+.project
+.mxproject
+*.launch
+
+# File log, backup
+*.log
+*.bak
+*.tmp
+
+# Thư mục hệ thống/macOS
+.DS_Store
+Thumbs.db
+
+# Bỏ qua thư mục liên quan đến IDE
+.idea/
+*.sw?
+
+# Bỏ qua output linker/map files nếu có
+*.map
+*.elf
+*.bin
+*.hex
+*.list
+
+# CMake/Make nếu được tạo
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+
+# Các file tạm thời khác
+*.o
+*.d
+*.dep
+*.exe
+*.out
+*.a
