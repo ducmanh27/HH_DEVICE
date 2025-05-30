@@ -31,6 +31,7 @@
 #include <string.h>
 #include <time.h>
 #include "sht2x.h"
+#include "uart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,14 +41,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define FRAME_HEADER_HIGH  0xAA
-#define FRAME_HEADER_LOW   0x55
-#define HEADER_LEN 2
-#define SEQUENCE_LEN 2
-#define SIZE_LEN_BYTES 2
-#define CRC_LEN 2
-#define PAYLOAD_LEN sizeof(sensor_data_t)
-#define FRAME_LEN (HEADER_LEN + SEQUENCE_LEN + SIZE_LEN_BYTES + PAYLOAD_LEN + CRC_LEN)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -70,10 +63,10 @@ DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 #define DWT_CTRL (*(volatile uint32_t*)0xE0001000)
-//int __io_putchar(int ch) {
-//    HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-//    return ch;
-//}
+int __io_putchar(int ch) {
+    HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+    return ch;
+}
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -92,6 +85,7 @@ static uint32_t getCurrentTime();
 static void monitor_energy(void* parameters);
 static void monitor_dust(void* parameters);
 static void send_uart(void* parameters);
+static void cli_handle_task(void* parameters);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -109,8 +103,7 @@ GP2Y1010_HandleTypeDef dustSensor = {
 	.hadc = &hadc1,
 	.Vcc = 5.0f
 };
-
-uint8_t sensorDataFrame[FRAME_LEN];
+uint8_t rx_data;
 sensor_data_t sensorData;
 float fake_dust_density = 0;
 static uint16_t sequenceId = 0;
@@ -128,7 +121,10 @@ int main(void)
 	TaskHandle_t monitor_energy_handle;
 	TaskHandle_t monitor_dust_handle;
 	TaskHandle_t send_uart_handle;
+	TaskHandle_t command_line_interface_handle;
 	BaseType_t status;
+
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -158,7 +154,7 @@ int main(void)
   MX_RTC_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-
+  CLI_UART_Init(&huart2);
   //Enable the CYCCNT counter.
 //  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 //  DWT->CYCCNT = 0;
@@ -184,7 +180,9 @@ int main(void)
   configASSERT(status == pdPASS);
   status = xTaskCreate(monitor_dust, "DustMonitorTask", 200, NULL, 2, &monitor_dust_handle);
   configASSERT(status == pdPASS);
-  status = xTaskCreate(send_uart, "SendUART", 1024, NULL, 2, &send_uart_handle);
+  status = xTaskCreate(send_uart, "SendSensorDataUART", 1024, NULL, 2, &send_uart_handle);
+  configASSERT(status == pdPASS);
+  status = xTaskCreate(cli_handle_task, "CommandLineInterfaceTask", 200, NULL, 2, &command_line_interface_handle);
   configASSERT(status == pdPASS);
   /* USER CODE END 2 */
 
@@ -570,8 +568,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(OTG_FS_PowerSwitchOn_GPIO_Port, OTG_FS_PowerSwitchOn_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, LD4_Pin|LD3_Pin|LD5_Pin|LD6_Pin
-                          |Audio_RST_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOD, LD4_Pin|LD3_Pin|LD5_Pin|LD6_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : CS_I2C_SPI_Pin */
   GPIO_InitStruct.Pin = CS_I2C_SPI_Pin;
@@ -625,10 +622,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
   HAL_GPIO_Init(CLK_IN_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LD4_Pin LD3_Pin LD5_Pin LD6_Pin
-                           Audio_RST_Pin */
-  GPIO_InitStruct.Pin = LD4_Pin|LD3_Pin|LD5_Pin|LD6_Pin
-                          |Audio_RST_Pin;
+  /*Configure GPIO pins : LD4_Pin LD3_Pin LD5_Pin LD6_Pin */
+  GPIO_InitStruct.Pin = LD4_Pin|LD3_Pin|LD5_Pin|LD6_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -728,21 +723,6 @@ static void send_uart(void* parameters)
 			    temp.time_stamp = getCurrentTime();
 				xSemaphoreGive(xSensorMutex);
 			}
-//			uint8_t payload[sizeof(sensor_data_t)];
-//			memcpy(payload, &temp, sizeof(sensor_data_t));
-//			uint16_t payloadLen = sizeof(sensor_data_t);
-//            sensorDataFrame[0] = FRAME_HEADER_HIGH;
-//            sensorDataFrame[1] = FRAME_HEADER_LOW;
-//            sensorDataFrame[2] = (sequenceId >> 8) & 0xFF;
-//            sensorDataFrame[3] = sequenceId & 0xFF;
-//            sensorDataFrame[4] = (payloadLen >> 8) & 0xFF;
-//            sensorDataFrame[5] = payloadLen & 0xFF;
-//            memcpy(&sensorDataFrame[6], payload, payloadLen);
-//            uint16_t crc = PZEM004T_CalculateCRC16(sensorDataFrame, HEADER_LEN + SEQUENCE_LEN + SIZE_LEN_BYTES + payloadLen);
-//            sensorDataFrame[HEADER_LEN + SEQUENCE_LEN + SIZE_LEN_BYTES + payloadLen] = (crc >> 8) & 0xFF;
-//            sensorDataFrame[HEADER_LEN + SEQUENCE_LEN + SIZE_LEN_BYTES + payloadLen + 1] = crc & 0xFF;
-//			HAL_UART_Transmit(&huart6, sensorDataFrame, FRAME_LEN, 100);
-//			HAL_UART_Transmit(&huart2, sensorDataFrame, FRAME_LEN, 100);
             int len = snprintf(jsonBuffer, sizeof(jsonBuffer),
                 "{\"voltage\":%.2f,\"current\":%.2f,\"power\":%.2f,\"energy\":%.2f,"
                 "\"pf\":%.2f,\"frequency\":%.2f,\"dust_density\":%.2f,\"time_stamp\":%lu,"
@@ -753,12 +733,26 @@ static void send_uart(void* parameters)
 
             if (len > 0 && len < sizeof(jsonBuffer)) {
                 HAL_UART_Transmit(&huart6, (uint8_t*)jsonBuffer, len, 100);
-                HAL_UART_Transmit(&huart2, (uint8_t*)jsonBuffer, len, 100);
+                printf(jsonBuffer);
             }
 			sequenceId++;
 		}
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
+}
+
+static void cli_handle_task(void* parameters)
+{
+	for (;;)
+	{
+		CLI_UART_Handle();
+		vTaskDelay(pdMS_TO_TICKS(100));
+	}
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	CLI_UART_RXCallback(huart);
 }
 
 /**
