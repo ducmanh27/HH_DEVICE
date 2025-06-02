@@ -104,6 +104,7 @@ GP2Y1010_HandleTypeDef dustSensor = {
 	.Vcc = 5.0f
 };
 uint8_t rx_data;
+static uint8_t rx_byte = 0;
 sensor_data_t sensorData;
 float fake_dust_density = 0;
 static uint16_t sequenceId = 0;
@@ -130,7 +131,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+																																																																																																																			HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -155,6 +156,7 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   CLI_UART_Init(&huart2);
+  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   //Enable the CYCCNT counter.
 //  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 //  DWT->CYCCNT = 0;
@@ -733,7 +735,7 @@ static void send_uart(void* parameters)
 
             if (len > 0 && len < sizeof(jsonBuffer)) {
                 HAL_UART_Transmit(&huart6, (uint8_t*)jsonBuffer, len, 100);
-                printf(jsonBuffer);
+//                printf(jsonBuffer);
             }
 			sequenceId++;
 		}
@@ -752,7 +754,12 @@ static void cli_handle_task(void* parameters)
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	CLI_UART_RXCallback(huart);
+    if (huart->Instance == USART2)
+    {
+    	CLI_UART_ReceiveData(rx_byte);
+        HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+    }
+
 }
 
 /**

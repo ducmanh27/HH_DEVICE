@@ -12,7 +12,7 @@
 #include "stm32f4xx_hal.h"
 void CLI_UART_Init(UART_HandleTypeDef *huart);
 void CLI_UART_Handle(void);
-void CLI_UART_RXCallback(UART_HandleTypeDef *huart);
+void CLI_UART_ReceiveData(uint8_t data_rx);
 
 
 
