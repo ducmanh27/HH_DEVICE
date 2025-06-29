@@ -25,7 +25,7 @@
 char msg[MSG_BUFFER_SIZE];
 const char* ssid     = "MANHPD9-2.4G";
 const char* password = "12345687";
-const char* mqtt_server = "broker.hivemq.com";
+const char* mqtt_server = "192.168.2.30";
 const char* topic_node_request = "node/request";
 const char* topic_node_reply = "node/reply";
 const char* topic_gateway_reply = "gateway/reply";
@@ -187,7 +187,7 @@ void createAllTasks()
   status = xTaskCreatePinnedToCore(
     sendSensorDataTask,                
     "sendSensorDataFromNode",      
-    10000,                          
+    20000,                          
     NULL,                         
     2,                             
     &sendSensorDataTaskHandle,           
@@ -423,11 +423,14 @@ void handleKeepAlive(const JsonDocument& doc)
   //   "timeStamp": "2023-10-01T12:00:00"
   // }
   int targetNodeId = doc["nodeId"] | 0;
-  if (targetNodeId == DeviceInfo::getInstance().getNodeId()) {
+  String mac = doc["macAddress"] | "";
+  if (targetNodeId == DeviceInfo::getInstance().getNodeId() && 
+      mac == DeviceInfo::getInstance().getMacAddress()) {
     JsonDocument replyDoc;
     replyDoc["messageType"] = "keepAliveReply";
     replyDoc["nodeId"] = DeviceInfo::getInstance().getNodeId();
-    replyDoc["timeStamp"] = getCurrentTime();
+    replyDoc["macAddress"] = DeviceInfo::getInstance().getMacAddress();
+    replyDoc["timeStamp"] = getCurrentTime(); 
     String payload;
     serializeJson(replyDoc, payload);
     mqttClient.publish(topic_node_reply, payload.c_str());
